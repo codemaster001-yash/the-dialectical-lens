@@ -1,0 +1,6 @@
+{
+  "name": "The Dialectical Lens",
+  "description": "An AI-powered application to resolve conflicts and understand complex topics by simulating a structured, multi-persona debate. It fosters empathy by creating AI personas based on user-provided details and guides a conversation towards resolution or synthesis.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
