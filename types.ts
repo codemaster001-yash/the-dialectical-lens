@@ -1,44 +1,59 @@
 
-export type AppScreen = 'home' | 'setup' | 'debate' | 'conclusion' | 'history';
-
-export type Theme = 'light' | 'dark';
-
-export interface PersonaDetails {
+export interface PersonaInput {
+  id: number;
   name: string;
-  role: string;
-  goal: string;
-  grievance: string;
+  age: string;
+  gender: string;
+  profession: string;
+  country: string;
+  goals: string;
+  perspective: string;
 }
 
 export interface Persona {
-  id: number;
+  userInput: PersonaInput;
   name: string;
   title: string;
-  philosophy: string; // The detailed internal monologue for the AI
-  summary: string; // A brief summary for the UI card
-  initialDetails: PersonaDetails;
+  summary: string;
+  full_description: string;
 }
 
 export interface ChatMessage {
   personaName: string;
   message: string;
+  timestamp: number;
 }
 
-export interface SynthesisReport {
-  viewpointSummaries: { personaName: string; summary: string }[];
-  pointsOfAgreement: string[];
-  pointsOfConflict: string[];
-  bridgingQuestions: string[];
-  finalConclusion: string;
+export interface ActionItem {
+  personaName: string;
+  suggestions: string[];
 }
 
-export interface Conflict {
-  id?: number;
+export interface Conclusion {
+  summary: string[];
+  agreement_points: string[];
+  conflict_points: string[];
+  bridging_questions: string[];
+  conclusion: string;
+  action_items: ActionItem[];
+}
+
+export interface DebateSession {
+  id: string;
+  createdAt: string;
   topic: string;
-  createdAt: Date;
-  participantCount: number;
-  personaDetails: PersonaDetails[];
-  personas?: Persona[];
-  chatHistory?: ChatMessage[];
-  synthesisReport?: SynthesisReport;
+  personas: Persona[];
+  chatLog: ChatMessage[];
+  conclusion: Conclusion | null;
 }
+
+export enum Screen {
+  Splash,
+  Setup,
+  PersonaCreation,
+  PersonaGallery,
+  Debate,
+  History,
+}
+
+export type LoadingState = 'idle' | 'loading' | 'success' | 'error';

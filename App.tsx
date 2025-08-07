@@ -1,103 +1,129 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Header } from '@/components/Header';
-import { HomePage } from '@/pages/HomePage';
-import { SetupPage } from '@/pages/SetupPage';
-import { DebatePage } from '@/pages/DebatePage';
-import { ConclusionPage } from '@/pages/ConclusionPage';
-import { HistoryPage } from '@/pages/HistoryPage';
-import { ToastContainer, Toast } from '@/components/Toast';
-import { FloatingGameButton } from '@/components/FloatingGameButton';
-import { GamePanel } from '@/components/GamePanel';
-import type { AppScreen } from '@/types';
+import type { DebateSession, Persona, PersonaInput, Screen as ScreenEnum } from './types';
+import { Screen } from './types';
+
+import SplashScreen from './components/screens/SplashScreen';
+import SetupScreen from './components/screens/SetupScreen';
+import PersonaCreationScreen from './components/screens/PersonaCreationScreen';
+import PersonaGalleryScreen from './components/screens/PersonaGalleryScreen';
+import DebateScreen from './components/screens/DebateScreen';
+import HistoryScreen from './components/screens/HistoryScreen';
+import { SunIcon, MoonIcon, HistoryIcon, HomeIcon, FullscreenEnterIcon, FullscreenExitIcon } from './components/icons/Icons';
 
 const App: React.FC = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const savedTheme = localStorage.getItem('theme');
-    return (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : 'dark';
-  });
-
-  const [screen, setScreen] = useState<AppScreen>('home');
-  const [activeConflictId, setActiveConflictId] = useState<number | null>(null);
-  const [toasts, setToasts] = useState<{ id: number; message: string; type: 'error' | 'success' }[]>([]);
-  const [isGamePanelOpen, setGamePanelOpen] = useState(false);
-
+  const [screen, setScreen] = useState<ScreenEnum>(Screen.Splash);
+  const [currentSession, setCurrentSession] = useState<Partial<DebateSession>>({});
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (theme === 'dark') {
+    const isDark =
+      localStorage.getItem('theme') === 'dark' ||
+      (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setIsDarkMode(isDark);
+    if (isDark) {
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
-  };
-  
-  const addToast = useCallback((message: string, type: 'error' | 'success' = 'error') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(currentToasts => currentToasts.filter(toast => toast.id !== id));
-    }, 5000);
   }, []);
 
-  const navigateTo = (newScreen: AppScreen, conflictId?: number) => {
-    if (conflictId) {
-      setActiveConflictId(conflictId);
+  const toggleTheme = () => {
+    setIsDarkMode(prev => {
+      const newIsDark = !prev;
+      if (newIsDark) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+      return newIsDark;
+    });
+  };
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullScreen(true)).catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
     } else {
-      setActiveConflictId(null);
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => setIsFullScreen(false));
+      }
     }
-    setScreen(newScreen);
-    window.scrollTo(0, 0);
+  };
+
+  const handleSetupComplete = (topic: string, participants: PersonaInput[]) => {
+    setCurrentSession({ topic, personas: participants.map(p => ({ userInput: p } as Persona)) });
+    setScreen(Screen.PersonaCreation);
   };
   
-  const handleViewConclusion = (conflictId: number) => {
-    setActiveConflictId(conflictId);
-    setScreen('conclusion');
-  }
+  const handlePersonasGenerated = (personas: Persona[]) => {
+    setCurrentSession(prev => ({ ...prev, personas }));
+    setScreen(Screen.PersonaGallery);
+  };
+
+  const handleDebateStart = () => {
+    setScreen(Screen.Debate);
+  };
+  
+  const handleDebateComplete = (session: DebateSession) => {
+    setCurrentSession(session);
+    // After debate, maybe go to a summary screen or back to history
+    setScreen(Screen.History); 
+  };
+  
+  const handleViewHistory = () => {
+    setScreen(Screen.History);
+  };
+
+  const resetToHome = () => {
+    setCurrentSession({});
+    setScreen(Screen.Setup);
+  };
 
   const renderScreen = () => {
     switch (screen) {
-      case 'home':
-        return <HomePage navigateTo={navigateTo} />;
-      case 'setup':
-        return <SetupPage navigateTo={navigateTo} addToast={addToast} />;
-      case 'debate':
-        if (!activeConflictId) {
-          addToast("Error: No active conflict selected.");
-          navigateTo('home');
-          return null;
-        }
-        return <DebatePage navigateTo={navigateTo} conflictId={activeConflictId} addToast={addToast} />;
-      case 'conclusion':
-         if (!activeConflictId) {
-          addToast("Error: No active conflict selected.");
-          navigateTo('home');
-          return null;
-        }
-        return <ConclusionPage navigateTo={navigateTo} conflictId={activeConflictId} />;
-      case 'history':
-        return <HistoryPage navigateTo={navigateTo} onViewConclusion={handleViewConclusion} />;
+      case Screen.Splash:
+        return <SplashScreen onComplete={resetToHome} onError={setError} />;
+      case Screen.Setup:
+        return <SetupScreen onSetupComplete={handleSetupComplete} />;
+      case Screen.PersonaCreation:
+        return <PersonaCreationScreen session={currentSession as {topic: string, personas: {userInput: PersonaInput}[]}} onPersonasGenerated={handlePersonasGenerated} onError={setError} />;
+      case Screen.PersonaGallery:
+        return <PersonaGalleryScreen personas={currentSession.personas as Persona[]} onDebateStart={handleDebateStart} />;
+      case Screen.Debate:
+        return <DebateScreen session={currentSession as {topic: string, personas: Persona[]}} onDebateComplete={handleDebateComplete} onError={setError} />;
+      case Screen.History:
+        return <HistoryScreen />;
       default:
-        return <HomePage navigateTo={navigateTo} />;
+        return <div>Unknown Screen</div>;
     }
   };
 
   return (
-    <div className="bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text min-h-screen font-sans">
-      <Header theme={theme} toggleTheme={toggleTheme} />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen w-full transition-colors duration-300">
+      <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-light-primary/80 dark:bg-dark-primary/80 backdrop-blur-sm">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={resetToHome}>
+            <svg width="32" height="32" viewBox="0 0 100 100" className="fill-light-text dark:fill-dark-text"><path d="M50,10A40,40,0,0,0,14.6,25.4L30,40.8A20,20,0,1,1,30,60l-15.4,15.4A40,40,0,1,0,50,10Z"/></svg>
+            <h1 className="text-xl font-bold">Convolution</h1>
+        </div>
+        <nav className="flex items-center gap-4">
+            {screen > Screen.Splash && <button onClick={resetToHome} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><HomeIcon /></button>}
+            <button onClick={handleViewHistory} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"><HistoryIcon /></button>
+            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                {isDarkMode ? <SunIcon /> : <MoonIcon />}
+            </button>
+            <button onClick={toggleFullScreen} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                {isFullScreen ? <FullscreenExitIcon /> : <FullscreenEnterIcon />}
+            </button>
+        </nav>
+      </header>
+      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-red-500 text-white py-2 px-4 rounded-md shadow-lg animate-fade-in">{error}</div>}
         {renderScreen()}
       </main>
-      <ToastContainer>
-        {toasts.map(toast => (
-          <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToasts(current => current.filter(t => t.id !== toast.id))} />
-        ))}
-      </ToastContainer>
-      <FloatingGameButton onClick={() => setGamePanelOpen(true)} />
-      <GamePanel isOpen={isGamePanelOpen} onClose={() => setGamePanelOpen(false)} />
     </div>
   );
 };
