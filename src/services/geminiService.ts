@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { PersonaInput, Persona, ChatMessage, Conclusion } from '../types';
 
@@ -22,7 +21,7 @@ const getAiClient = (): GoogleGenAI => {
 }
 
 // --- Helper Functions ---
-const cleanAiText = (text: string): string => {
+const cleanAiText = (text: string | undefined): string => {
     if (!text) return "";
     // Removes markdown formatting characters like asterisks for bold/italic and hashes for headers.
     // Also removes surrounding quotation marks which the model sometimes adds.
@@ -118,7 +117,12 @@ export const generatePersona = async (input: PersonaInput, conflict: string): Pr
         }
     });
 
-    const personaJson = JSON.parse(response.text);
+    const responseText = response.text ?? '';
+    if (!responseText) {
+        throw new Error("Received an empty response from the AI when generating a persona.");
+    }
+
+    const personaJson = JSON.parse(responseText);
     const cleanedPersona = {
         name: cleanAiText(personaJson.name),
         title: cleanAiText(personaJson.title),
@@ -156,7 +160,7 @@ It's your turn. Your goal is to help everyone converge on a shared understanding
     let messageChunk: ChatMessage = { personaName: currentPersona.name, message: "", timestamp: Date.now() };
 
     for await (const chunk of stream) {
-        const textChunk = chunk.text;
+        const textChunk = chunk.text ?? '';
         fullMessage += textChunk;
         // Clean the entire accumulated message so far on each yield
         messageChunk = { ...messageChunk, message: cleanAiText(fullMessage) };
@@ -182,8 +186,13 @@ Your task is to provide a final analysis as a JSON object matching the provided 
             responseSchema: conclusionSchema,
         }
     });
+    
+    const responseText = response.text ?? '';
+    if (!responseText) {
+        throw new Error("Received an empty response from the AI when synthesizing the conclusion.");
+    }
 
-    const conclusionJson = JSON.parse(response.text) as Conclusion;
+    const conclusionJson = JSON.parse(responseText) as Conclusion;
     return {
         summary: conclusionJson.summary.map(cleanAiText),
         agreement_points: conclusionJson.agreement_points.map(cleanAiText),

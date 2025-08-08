@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { DebateSession, Persona, PersonaInput, Screen as ScreenEnum } from './types';
 import { Screen } from './types';
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import { getAllSessions, deleteSession } from '../../services/dbService';
@@ -105,6 +104,8 @@ const generatePdfDocument = (session: DebateSession) => {
     });
 
     if (session.conclusion) {
+        // Create a new reference to the conclusion to satisfy TypeScript's strict null checks inside callbacks
+        const conclusionData = session.conclusion; 
         addSection('Conclusion & Analysis', () => {
             const addSubSection = (title: string, contentFn: () => void) => {
                 checkPageBreak(8);
@@ -116,15 +117,15 @@ const generatePdfDocument = (session: DebateSession) => {
             };
             
             addSubSection('Final Summary', () => {
-                const lines = doc.splitTextToSize(session.conclusion!.conclusion, maxW);
+                const lines = doc.splitTextToSize(conclusionData.conclusion, maxW);
                 doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(subtleTextColor[0], subtleTextColor[1], subtleTextColor[2]);
                 doc.text(lines, margin, y);
                 y += (lines.length * 4);
             });
             
-            if (session.conclusion.action_items?.length > 0) {
+            if (conclusionData.action_items?.length > 0) {
                  addSubSection('Actionable Suggestions', () => {
-                     session.conclusion!.action_items.forEach(item => {
+                     conclusionData.action_items.forEach(item => {
                          checkPageBreak(15);
                          doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(textColor[0], textColor[1], textColor[2]);
                          doc.text(item.personaName + ':', margin, y);
@@ -134,9 +135,9 @@ const generatePdfDocument = (session: DebateSession) => {
                  });
             }
 
-            addSubSection('Key Agreements', () => addList(session.conclusion!.agreement_points));
-            addSubSection('Key Conflicts', () => addList(session.conclusion!.conflict_points));
-            addSubSection('Bridging Questions', () => addList(session.conclusion!.bridging_questions));
+            addSubSection('Key Agreements', () => addList(conclusionData.agreement_points));
+            addSubSection('Key Conflicts', () => addList(conclusionData.conflict_points));
+            addSubSection('Bridging Questions', () => addList(conclusionData.bridging_questions));
         });
     }
 

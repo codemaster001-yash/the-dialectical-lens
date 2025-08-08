@@ -1,4 +1,3 @@
-
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { DebateSession } from '../types';
 
