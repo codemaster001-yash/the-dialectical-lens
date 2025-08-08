@@ -1,12 +1,149 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getAllSessions, deleteSession } from '../../services/dbService';
 import type { DebateSession } from '../../types';
-import { Spinner, TrashIcon, DownloadIcon } from '../icons/Icons';
+import { Spinner, TrashIcon, DownloadIcon, ReplayIcon } from '../icons/Icons';
 
 declare var jspdf: any;
-declare var html2canvas: any;
 
-const HistoryDetailView: React.FC<{ session: DebateSession, onBack: () => void, onDownload: (id: string) => void }> = ({ session, onBack, onDownload }) => {
+const generatePdfDocument = (session: DebateSession) => {
+    const { jsPDF } = jspdf;
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const maxW = pageW - margin * 2;
+    let y = margin;
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? [249, 249, 249] : [17, 24, 39];
+    const accentColor = isDark ? [99, 102, 241] : [79, 70, 229];
+    const subtleTextColor = isDark ? [156, 163, 175] : [107, 114, 128];
+    
+    const checkPageBreak = (requiredHeight: number) => {
+        if (y + requiredHeight > doc.internal.pageSize.getHeight() - margin) {
+            doc.addPage();
+            y = margin;
+        }
+    };
+
+    // --- Content ---
+    doc.setFont('helvetica', 'bold').setFontSize(22).setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+    const titleLines = doc.splitTextToSize(session.title, maxW);
+    checkPageBreak(titleLines.length * 10);
+    doc.text(titleLines, margin, y);
+    y += (titleLines.length * 8) + 2;
+    
+    doc.setFont('helvetica', 'italic').setFontSize(9).setTextColor(subtleTextColor[0], subtleTextColor[1], subtleTextColor[2]);
+    checkPageBreak(5);
+    doc.text(`Session from: ${new Date(session.createdAt).toLocaleString()}`, margin, y);
+    y += 10;
+
+    doc.setFont('helvetica', 'bold').setFontSize(14).setTextColor(textColor[0], textColor[1], textColor[2]);
+    checkPageBreak(10);
+    doc.text('Full Topic:', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal').setFontSize(11);
+    const topicLines = doc.splitTextToSize(session.topic, maxW);
+    checkPageBreak(topicLines.length * 5);
+    doc.text(topicLines, margin, y);
+    y += (topicLines.length * 4) + 8;
+    
+    const addSection = (title: string, contentFn: () => void) => {
+        checkPageBreak(12);
+        doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text(title, margin, y);
+        y += 8;
+        contentFn();
+        y += 5;
+    };
+    
+    const addList = (items: string[]) => {
+        items.forEach(item => {
+            const lines = doc.splitTextToSize(`• ${item}`, maxW - 5);
+            checkPageBreak(lines.length * 5);
+            doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(subtleTextColor[0], subtleTextColor[1], subtleTextColor[2]);
+            doc.text(lines, margin + 5, y);
+            y += (lines.length * 4) + 2;
+        });
+    };
+    
+    addSection('Participants', () => {
+        session.personas.forEach(p => {
+            checkPageBreak(40);
+            doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+            doc.text(p.name, margin, y);
+            y += 5;
+            doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(textColor[0], textColor[1], textColor[2]);
+            doc.text(p.title, margin, y);
+            y += 6;
+            
+            const printPersonaDetail = (label: string, text: string) => {
+                doc.setFont('helvetica', 'bold').setFontSize(9);
+                doc.text(label, margin, y);
+                y += 4;
+                doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(subtleTextColor[0], subtleTextColor[1], subtleTextColor[2]);
+                const lines = doc.splitTextToSize(text, maxW);
+                checkPageBreak(lines.length * 4);
+                doc.text(lines, margin, y);
+                y += (lines.length * 3.5) + 4;
+            };
+
+            printPersonaDetail('AI Persona Description:', p.full_description);
+            printPersonaDetail('User-Defined Goals:', p.userInput.goals);
+            printPersonaDetail('User-Defined Perspective:', p.userInput.perspective);
+            y += 4;
+        });
+    });
+
+    addSection('Transcript', () => {
+        session.chatLog.forEach(chat => {
+            const chatLine = `${chat.personaName}: ${chat.message}`;
+            const lines = doc.splitTextToSize(chatLine, maxW);
+            checkPageBreak(lines.length * 5);
+            doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(textColor[0], textColor[1], textColor[2]);
+            doc.text(lines, margin, y);
+            y += (lines.length * 4) + 3;
+        });
+    });
+
+    if (session.conclusion) {
+        addSection('Conclusion & Analysis', () => {
+            const addSubSection = (title: string, contentFn: () => void) => {
+                checkPageBreak(8);
+                doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(textColor[0], textColor[1], textColor[2]);
+                doc.text(title, margin, y);
+                y += 6;
+                contentFn();
+                y+= 4;
+            };
+            
+            addSubSection('Final Summary', () => {
+                const lines = doc.splitTextToSize(session.conclusion!.conclusion, maxW);
+                doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(subtleTextColor[0], subtleTextColor[1], subtleTextColor[2]);
+                doc.text(lines, margin, y);
+                y += (lines.length * 4);
+            });
+            
+            if (session.conclusion.action_items?.length > 0) {
+                 addSubSection('Actionable Suggestions', () => {
+                     session.conclusion!.action_items.forEach(item => {
+                         checkPageBreak(15);
+                         doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(textColor[0], textColor[1], textColor[2]);
+                         doc.text(item.personaName + ':', margin, y);
+                         y += 5;
+                         addList(item.suggestions);
+                     });
+                 });
+            }
+
+            addSubSection('Key Agreements', () => addList(session.conclusion!.agreement_points));
+            addSubSection('Key Conflicts', () => addList(session.conclusion!.conflict_points));
+            addSubSection('Bridging Questions', () => addList(session.conclusion!.bridging_questions));
+        });
+    }
+
+    doc.save(`convolution-session-${session.title.replace(/\s/g, '_')}.pdf`);
+};
+
+const HistoryDetailView: React.FC<{ session: DebateSession, onBack: () => void, onReplay: (session: DebateSession) => void, onDownload: (id: string) => void }> = ({ session, onBack, onReplay, onDownload }) => {
     return (
         <div className="bg-light-secondary dark:bg-dark-secondary p-8 rounded-2xl shadow-lg">
             <div className="flex justify-between items-start mb-6">
@@ -17,7 +154,7 @@ const HistoryDetailView: React.FC<{ session: DebateSession, onBack: () => void, 
                 </div>
             </div>
             
-            <div id={`pdf-content-${session.id}`} className="bg-light-primary dark:bg-dark-primary p-6 rounded-xl">
+            <div className="bg-light-primary dark:bg-dark-primary p-6 rounded-xl">
                  <div className='mb-6'>
                     <h3 className="text-lg font-bold text-light-text/90 dark:text-dark-text/90">Full Topic</h3>
                     <p className="mt-1 text-light-text/70 dark:text-dark-text/70">{session.topic}</p>
@@ -99,16 +236,19 @@ const HistoryDetailView: React.FC<{ session: DebateSession, onBack: () => void, 
                  )}
             </div>
 
-            <div className="text-center mt-8">
-                <button onClick={() => onDownload(session.id)} className="px-6 py-3 bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors flex items-center justify-center gap-2 mx-auto">
+            <div className="text-center mt-8 flex justify-center items-center gap-4">
+                <button onClick={() => onDownload(session.id)} className="px-6 py-3 bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors flex items-center justify-center gap-2">
                     <DownloadIcon/> Download PDF
+                </button>
+                 <button onClick={() => onReplay(session)} className="px-6 py-3 bg-gray-600 text-white font-bold rounded-lg shadow-md hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
+                    <ReplayIcon/> Replay Conversation
                 </button>
             </div>
         </div>
     );
 };
 
-const HistoryScreen: React.FC = () => {
+const HistoryScreen: React.FC<{onReplay: (session: DebateSession) => void}> = ({ onReplay }) => {
   const [sessions, setSessions] = useState<DebateSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -142,26 +282,7 @@ const HistoryScreen: React.FC = () => {
         console.error("Could not find session to download.");
         return;
     }
-
-    const { jsPDF } = jspdf;
-    const content = document.getElementById(`pdf-content-${sessionId}`);
-    if(content){
-        const canvas = await html2canvas(content, { 
-            scale: 2, 
-            useCORS: true,
-            backgroundColor: document.documentElement.classList.contains('dark') ? '#111827' : '#F9F9F9'
-        });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const ratio = pdfWidth / imgWidth;
-        const pdfHeight = imgHeight * ratio;
-
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`convolution-session-${session.title.replace(/\s/g, '_')}.pdf`);
-    }
+    generatePdfDocument(session);
   };
   
   const filteredSessions = sessions
@@ -174,7 +295,7 @@ const HistoryScreen: React.FC = () => {
     });
 
   if (selectedSession) {
-      return <HistoryDetailView session={selectedSession} onBack={() => setSelectedSession(null)} onDownload={handleDownloadPdf} />
+      return <HistoryDetailView session={selectedSession} onBack={() => setSelectedSession(null)} onReplay={onReplay} onDownload={handleDownloadPdf} />
   }
 
   return (
@@ -198,7 +319,9 @@ const HistoryScreen: React.FC = () => {
                             <p className="text-sm text-gray-500">{new Date(session.createdAt).toLocaleString()}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                             <button onClick={() => handleDelete(session.id)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full transition-colors"><TrashIcon/></button>
+                             <button title="Replay" onClick={() => onReplay(session)} className="p-2 text-light-accent dark:text-dark-accent hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-colors"><ReplayIcon/></button>
+                             <button title="Download PDF" onClick={() => handleDownloadPdf(session.id)} className="p-2 text-light-accent dark:text-dark-accent hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-colors"><DownloadIcon/></button>
+                             <button title="Delete" onClick={() => handleDelete(session.id)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full transition-colors"><TrashIcon/></button>
                         </div>
                     </div>
                 )) : (

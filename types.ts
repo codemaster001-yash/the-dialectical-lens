@@ -54,6 +54,7 @@ export enum Screen {
   PersonaGallery,
   Debate,
   History,
+  Replay,
 }
 
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';

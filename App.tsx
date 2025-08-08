@@ -10,12 +10,14 @@ import PersonaCreationScreen from './components/screens/PersonaCreationScreen';
 import PersonaGalleryScreen from './components/screens/PersonaGalleryScreen';
 import DebateScreen from './components/screens/DebateScreen';
 import HistoryScreen from './components/screens/HistoryScreen';
+import ReplayScreen from './components/screens/ReplayScreen';
 import { SunIcon, MoonIcon, HistoryIcon, HomeIcon, FullscreenEnterIcon, FullscreenExitIcon } from './components/icons/Icons';
 
 const App: React.FC = () => {
   const [isKeyValid, setIsKeyValid] = useState(false);
   const [screen, setScreen] = useState<ScreenEnum>(Screen.Splash);
   const [currentSession, setCurrentSession] = useState<Partial<DebateSession>>({});
+  const [sessionToReplay, setSessionToReplay] = useState<DebateSession | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -96,6 +98,11 @@ const App: React.FC = () => {
     setScreen(Screen.History);
   };
 
+  const handleReplaySession = (session: DebateSession) => {
+    setSessionToReplay(session);
+    setScreen(Screen.Replay);
+  };
+
   const resetToHome = () => {
     setCurrentSession({});
     setScreen(Screen.Setup);
@@ -118,7 +125,13 @@ const App: React.FC = () => {
       case Screen.Debate:
         return <DebateScreen session={currentSession as {topic: string, title: string, personas: Persona[]}} onDebateComplete={handleDebateComplete} onError={setError} />;
       case Screen.History:
-        return <HistoryScreen />;
+        return <HistoryScreen onReplay={handleReplaySession} />;
+      case Screen.Replay:
+        if (!sessionToReplay) {
+            resetToHome();
+            return null;
+        }
+        return <ReplayScreen session={sessionToReplay} onBack={handleViewHistory} />;
       default:
         return <div>Unknown Screen</div>;
     }
