@@ -1,0 +1,9 @@
+# This configuration tells Netlify how to build and deploy your Vite project.
+[build]
+  # This is the standard command to build a Vite application for production.
+  # It runs the 'build' script defined in your package.json file.
+  command = "npm run build"
+  
+  # This tells Netlify where to find the finished, compiled website.
+  # Vite places the optimized files in a 'dist' folder by default.
+  publish = "dist"
