@@ -1,88 +1,127 @@
 <!DOCTYPE html>
 <html lang="en" class="">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Convolution</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- START: Open Graph / Social Media Meta Tags -->
+    <meta property="og:title" content="Convolution" />
+    <meta
+      property="og:description"
+      content="An AI-powered application for structured debate and conflict resolution."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://convolution-debates.netlify.app/"
+    />
+    <meta
+      property="og:image"
+      content="https://convolution-debates.netlify.app/logo-preview.png"
+    />
+
+    <!-- START: Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Convolution" />
+    <meta
+      name="twitter:description"
+      content="An AI-powered application for structured debate and conflict resolution."
+    />
+    <meta
+      name="twitter:image"
+      content="https://convolution-debates.netlify.app/logo-preview.png"
+    />
+    <!-- END: Meta Tags -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        // --- START OF CONFIGURATION ---
-        // This placeholder will be replaced by Netlify during the build process.
-        // For local development, you can manually replace '%%GEMINI_API_KEY%%'
-        // with your actual key to run the app on your machine.
-        window.CONVOLUTION_API_KEY = "AIzaSyAtU0APa4gIm-BwySJ7_sgQsuuqok8q8wA";
-        // --- END OF CONFIGURATION ---
+      // --- START OF CONFIGURATION ---
+      // This placeholder will be replaced by Netlify during the build process.
+      // For local development, you can manually replace '%%GEMINI_API_KEY%%'
+      // with your actual key to run the app on your machine.
+      window.CONVOLUTION_API_KEY = "%%GEMINI_API_KEY%%";
+      // --- END OF CONFIGURATION ---
 
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        'light-primary': '#F9F9F9',
-                        'light-secondary': '#FFFFFF',
-                        'light-text': '#111827',
-                        'light-accent': '#4F46E5',
-                        'dark-primary': '#111827',
-                        'dark-secondary': '#1F2937',
-                        'dark-text': '#F9F9F9',
-                        'dark-accent': '#6366F1',
-                        'success': '#10B981',
-                        'success-hover': '#059669',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' },
-                        },
-                        fadeOut: {
-                            '0%': { opacity: '1' },
-                            '100%': { opacity: '0' },
-                        },
-                        slideIn: {
-                            '0%': { transform: 'translateY(20px)', opacity: '0'},
-                            '100%': { transform: 'translateY(0)', opacity: '1'},
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 1s ease-in-out',
-                        'fade-out': 'fadeOut 1s ease-in-out',
-                        'slide-in': 'slideIn 0.5s ease-out forwards',
-                    }
-                },
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "light-primary": "#F9F9F9",
+              "light-secondary": "#FFFFFF",
+              "light-text": "#111827",
+              "light-accent": "#4F46E5",
+              "dark-primary": "#111827",
+              "dark-secondary": "#1F2937",
+              "dark-text": "#F9F9F9",
+              "dark-accent": "#6366F1",
+              success: "#10B981",
+              "success-hover": "#059669",
             },
-        };
-        // Set theme on initial load to prevent FOUC
-        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            keyframes: {
+              fadeIn: {
+                "0%": { opacity: "0" },
+                "100%": { opacity: "1" },
+              },
+              fadeOut: {
+                "0%": { opacity: "1" },
+                "100%": { opacity: "0" },
+              },
+              slideIn: {
+                "0%": { transform: "translateY(20px)", opacity: "0" },
+                "100%": { transform: "translateY(0)", opacity: "1" },
+              },
+            },
+            animation: {
+              "fade-in": "fadeIn 1s ease-in-out",
+              "fade-out": "fadeOut 1s ease-in-out",
+              "slide-in": "slideIn 0.5s ease-out forwards",
+            },
+          },
+        },
+      };
+      // Set theme on initial load to prevent FOUC
+      if (
+        localStorage.getItem("theme") === "dark" ||
+        (!("theme" in localStorage) &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
     </script>
     <script src="https://unpkg.com/idb@7/build/umd.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
-    "idb": "https://esm.sh/idb@^8.0.3"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-<body class="bg-light-primary dark:bg-dark-primary text-light-text dark:text-dark-text font-sans antialiased selection:bg-light-accent/30 dark:selection:bg-dark-accent/30">
+    <script type="importmap">
+      {
+        "imports": {
+          "react/": "https://esm.sh/react@^19.1.1/",
+          "react": "https://esm.sh/react@^19.1.1",
+          "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
+          "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+          "idb": "https://esm.sh/idb@^8.0.3"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body
+    class="bg-light-primary dark:bg-dark-primary text-light-text dark:text-dark-text font-sans antialiased selection:bg-light-accent/30 dark:selection:bg-dark-accent/30"
+  >
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-</body>
+  </body>
 </html>
