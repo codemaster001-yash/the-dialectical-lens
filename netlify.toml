@@ -1,8 +1,8 @@
 # This configuration file instructs Netlify on how to build and deploy your site.
 [build]
   # This 'command' runs during the build process on Netlify's servers.
-  # It uses a standard tool (sed) to find the placeholder text '%%API_KEY%%'
+  # It uses a standard tool (sed) to find the placeholder text '%%GEMINI_API_KEY%%'
   # in your index.html file and replaces it with the actual secret API key
-  # that you have stored as 'API_KEY' in your Netlify environment variables.
+  # that you have stored as 'GEMINI_API_KEY' in your Netlify environment variables.
   # This process is secure and your key is never exposed in your public code.
-  command = "sed -i 's|%%API_KEY%%|'\"$API_KEY\"'|g' index.html"
+  command = "sed -i 's|%%GEMINI_API_KEY%%|'\"$GEMINI_API_KEY\"'|g' index.html"
