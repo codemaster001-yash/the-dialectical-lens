@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { getWelcomeMessage } from '../../services/geminiService';
 import { Spinner } from '../icons/Icons';
@@ -19,7 +18,11 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onError }) => {
         setWelcomeMessage(msg);
       } catch (e) {
         console.error(e);
-        onError("Could not connect to AI services. Please check your API key and network connection.");
+        if (e instanceof Error) {
+            onError(e.message);
+        } else {
+            onError("An unknown error occurred while contacting AI services.");
+        }
         setWelcomeMessage("Welcome");
       }
     };

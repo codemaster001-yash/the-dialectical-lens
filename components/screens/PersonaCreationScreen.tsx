@@ -1,21 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generatePersona } from '../../services/geminiService';
-import type { Persona, PersonaInput } from '../../types';
-import { Spinner } from '../icons/Icons';
+import type { Persona, PersonaInput, DebateSession } from '../../types';
+import { Spinner, LoadIcon } from '../icons/Icons';
+import LoadFromHistoryModal from '../modals/LoadFromHistoryModal';
 
 interface PersonaCreationScreenProps {
   session: {
     topic: string;
+    title: string;
     personas: { userInput: PersonaInput }[];
   };
   onPersonasGenerated: (personas: Persona[]) => void;
+  onPersonaUpdate: (personas: PersonaInput[]) => void;
   onError: (message: string) => void;
 }
 
-const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, onPersonasGenerated, onError }) => {
+const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, onPersonasGenerated, onPersonaUpdate, onError }) => {
   const [participants, setParticipants] = useState<PersonaInput[]>(session.personas.map(p => p.userInput));
   const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Sync internal state if the session prop changes (e.g., from loading history)
+    setParticipants(session.personas.map(p => p.userInput));
+  }, [session.personas]);
 
   const handleInputChange = (index: number, field: keyof Omit<PersonaInput, 'id'>, value: string) => {
     const newParticipants = [...participants];
@@ -30,6 +39,7 @@ const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, 
     setIsLoading(true);
     onError(''); // Clear previous errors
     try {
+      // Use the internal, potentially edited state for generation
       const personaPromises = participants.map(p => generatePersona(p, session.topic));
       const generatedPersonas = await Promise.all(personaPromises);
       onPersonasGenerated(generatedPersonas);
@@ -39,14 +49,32 @@ const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, 
       setIsLoading(false);
     }
   };
+  
+  const handleLoadSession = (sessionToLoad: DebateSession) => {
+    if (!window.confirm('This will overwrite all current participant data. Are you sure?')) {
+        return;
+    }
+    // Update the central state in App.tsx
+    onPersonaUpdate(sessionToLoad.personas.map(p => p.userInput));
+    setActiveTab(0);
+    setIsLoadModalOpen(false);
+  };
 
   return (
     <div className="max-w-4xl mx-auto animate-slide-in">
+      {isLoadModalOpen && <LoadFromHistoryModal onLoad={handleLoadSession} onClose={() => setIsLoadModalOpen(false)} />}
       <div className="bg-light-secondary dark:bg-dark-secondary p-8 rounded-2xl shadow-lg">
-        <h2 className="text-3xl font-bold mb-2 text-center">Create Participants</h2>
-        <p className="text-center text-light-text/70 dark:text-dark-text/70 mb-8">
-          Define the background and perspective for each participant. The AI will use this to build a detailed persona.
-        </p>
+        <div className="flex justify-between items-start mb-2">
+            <div className="flex-grow">
+                <h2 className="text-3xl font-bold mb-2 text-center md:text-left">Create Participants</h2>
+                <p className="text-center md:text-left text-light-text/70 dark:text-dark-text/70 mb-4">
+                  Define the background and perspective for each participant. The AI will use this to build a detailed persona.
+                </p>
+            </div>
+            <button onClick={() => setIsLoadModalOpen(true)} className="p-2 ml-4 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors flex-shrink-0" aria-label="Load from history">
+                <LoadIcon />
+            </button>
+        </div>
 
         <div className="border-b border-gray-300 dark:border-gray-700 mb-6">
           <nav className="-mb-px flex space-x-6" aria-label="Tabs">
@@ -66,7 +94,7 @@ const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, 
           </nav>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {currentParticipant && <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  {Object.keys(currentParticipant).filter(k => k !== 'id' && k !== 'goals' && k !== 'perspective').map((key) => (
                     <div key={key}>
@@ -100,7 +128,7 @@ const PersonaCreationScreen: React.FC<PersonaCreationScreenProps> = ({ session, 
                     {isLoading ? 'Generating...' : 'Generate & Review Personas'}
                 </button>
             </div>
-        </form>
+        </form>}
       </div>
     </div>
   );

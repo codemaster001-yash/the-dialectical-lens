@@ -1,13 +1,35 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { PersonaInput, Persona, ChatMessage, Conclusion } from '../types';
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set. This is required to communicate with the Gemini API.");
+declare global {
+  interface Window {
+    CONVOLUTION_API_KEY: string;
+  }
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// --- API Key Management ---
+const PLACEHOLDER_KEY = "%%GEMINI_API_KEY%%";
+
+export const isApiKeyConfigured = (): boolean => {
+    const key = window.CONVOLUTION_API_KEY;
+    return !!key && key.trim() !== "" && key !== PLACEHOLDER_KEY;
+};
+
+
+let ai: GoogleGenAI | null = null;
+
+const getAiClient = (): GoogleGenAI => {
+    if (ai) return ai;
+
+    if (!isApiKeyConfigured()) {
+        throw new Error("API key is not configured.");
+    }
+    ai = new GoogleGenAI({ apiKey: window.CONVOLUTION_API_KEY });
+    return ai;
+}
+
+
+// --- Model Schemas ---
 const textModel = 'gemini-2.5-flash';
 
 const personaSchema = {
@@ -49,26 +71,44 @@ const conclusionSchema = {
     required: ["summary", "agreement_points", "conflict_points", "bridging_questions", "conclusion", "action_items"]
 };
 
-
+// --- API Functions ---
 export const getWelcomeMessage = async (): Promise<string> => {
     try {
+        const client = getAiClient();
         const prompt = "Translate the word 'Welcome' into a random, non-English language. Provide only the single, translated word as a plain string, without any additional text, formatting, or quotation marks.";
-        const response = await ai.models.generateContent({
+        const response = await client.models.generateContent({
             model: textModel,
             contents: prompt,
             config: { temperature: 0.9 }
         });
-        return response.text.replace(/["'.]/g, '').trim(); // Clean up quotes, periods, and whitespace
+        return response.text.replace(/["'.]/g, '').trim();
     } catch (error) {
         console.error("Error fetching welcome message:", error);
-        return "Welcome";
+        throw new Error("Could not connect to AI services. This could be a network issue or a problem with the Gemini API (e.g. invalid key).");
+    }
+};
+
+export const generateDebateTitle = async (topic: string): Promise<string> => {
+    try {
+        const client = getAiClient();
+        const prompt = `Generate a short, descriptive title (5 words or less) for a debate about the following topic. The title should be like a book or article title. Do not use quotation marks. Topic: "${topic}"`;
+        const response = await client.models.generateContent({
+            model: textModel,
+            contents: prompt,
+            config: { temperature: 0.7 }
+        });
+        return response.text.replace(/["'.]/g, '').trim();
+    } catch (error) {
+        console.error("Error generating debate title:", error);
+        throw new Error("Could not generate a title for the debate.");
     }
 };
 
 export const generatePersona = async (input: PersonaInput, conflict: string): Promise<Persona> => {
+    const client = getAiClient();
     const prompt = `You are a creative writer specializing in character development. Based on the following user-provided details, create a rich, empathetic, and detailed expert persona. User Details: ${JSON.stringify(input)}. The central conflict is: "${conflict}". Your output MUST be a valid JSON object matching the provided schema.`;
 
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
         model: textModel,
         contents: prompt,
         config: {
@@ -86,6 +126,7 @@ export async function* runDebateTurnStream(
     personas: Persona[],
     chatLog: ChatMessage[]
 ): AsyncGenerator<ChatMessage, void, void> {
+    const client = getAiClient();
     const turn = chatLog.length;
     const currentPersona = personas[turn % personas.length];
     const recentHistory = chatLog.slice(-5).map(m => `${m.personaName}: "${m.message}"`).join('\n');
@@ -99,7 +140,7 @@ ${recentHistory}
 
 It's your turn. Your goal is to help everyone converge on a shared understanding. Instead of just countering the last point, try to find common ground, ask a clarifying question, or offer a perspective that builds on what others have said. Your response should be natural, concise, and under 40 words. Speak as a person would, not a bot. Avoid formal greetings. Your response:`;
 
-    const stream = await ai.models.generateContentStream({
+    const stream = await client.models.generateContentStream({
         model: textModel,
         contents: prompt,
     });
@@ -117,6 +158,7 @@ It's your turn. Your goal is to help everyone converge on a shared understanding
 
 
 export const synthesizeConclusion = async (topic: string, chatLog: ChatMessage[]): Promise<Conclusion> => {
+    const client = getAiClient();
     const transcript = chatLog.map(m => `${m.personaName}: ${m.message}`).join('\n');
     const synthesisPrompt = `You are a master moderator and synthesis expert. The following is a transcript of a debate on the topic: '${topic}'.
 Transcript:
@@ -124,7 +166,7 @@ ${transcript}
 
 Your task is to provide a final analysis as a JSON object matching the provided schema. This includes summarizing agreements, conflicts, and proposing bridging questions. Crucially, you must also provide an 'action_items' array. For each participant, provide a 'personaName' and a 'suggestions' array containing exactly two concrete, actionable next steps they could take to help resolve the conflict.`;
 
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
         model: textModel,
         contents: synthesisPrompt,
         config: {

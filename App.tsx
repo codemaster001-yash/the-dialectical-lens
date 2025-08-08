@@ -1,8 +1,9 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { DebateSession, Persona, PersonaInput, Screen as ScreenEnum } from './types';
 import { Screen } from './types';
 
+import { isApiKeyConfigured, generateDebateTitle } from './services/geminiService';
+import ApiKeyInstructionsScreen from './components/screens/ApiKeyInstructionsScreen';
 import SplashScreen from './components/screens/SplashScreen';
 import SetupScreen from './components/screens/SetupScreen';
 import PersonaCreationScreen from './components/screens/PersonaCreationScreen';
@@ -12,13 +13,17 @@ import HistoryScreen from './components/screens/HistoryScreen';
 import { SunIcon, MoonIcon, HistoryIcon, HomeIcon, FullscreenEnterIcon, FullscreenExitIcon } from './components/icons/Icons';
 
 const App: React.FC = () => {
+  const [isKeyValid, setIsKeyValid] = useState(false);
   const [screen, setScreen] = useState<ScreenEnum>(Screen.Splash);
   const [currentSession, setCurrentSession] = useState<Partial<DebateSession>>({});
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsKeyValid(isApiKeyConfigured());
+    
     const isDark =
       localStorage.getItem('theme') === 'dark' ||
       (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -54,11 +59,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSetupComplete = (topic: string, participants: PersonaInput[]) => {
-    setCurrentSession({ topic, personas: participants.map(p => ({ userInput: p } as Persona)) });
-    setScreen(Screen.PersonaCreation);
+  const handleSetupComplete = async (topic: string, participants: PersonaInput[]) => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const title = await generateDebateTitle(topic);
+      setCurrentSession({ topic, title, personas: participants.map(p => ({ userInput: p } as Persona)) });
+      setScreen(Screen.PersonaCreation);
+    } catch (e) {
+      console.error(e);
+      setError("Failed to generate a title. Check your connection or API key.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
   
+  const handlePersonaUpdate = (participantInputs: PersonaInput[]) => {
+    setCurrentSession(prev => ({ ...prev, personas: participantInputs.map(p => ({ userInput: p } as Persona)) }));
+  };
+
   const handlePersonasGenerated = (personas: Persona[]) => {
     setCurrentSession(prev => ({ ...prev, personas }));
     setScreen(Screen.PersonaGallery);
@@ -70,7 +89,6 @@ const App: React.FC = () => {
   
   const handleDebateComplete = (session: DebateSession) => {
     setCurrentSession(session);
-    // After debate, maybe go to a summary screen or back to history
     setScreen(Screen.History); 
   };
   
@@ -88,19 +106,27 @@ const App: React.FC = () => {
       case Screen.Splash:
         return <SplashScreen onComplete={resetToHome} onError={setError} />;
       case Screen.Setup:
-        return <SetupScreen onSetupComplete={handleSetupComplete} />;
+        return <SetupScreen onSetupComplete={handleSetupComplete} isProcessing={isProcessing} />;
       case Screen.PersonaCreation:
-        return <PersonaCreationScreen session={currentSession as {topic: string, personas: {userInput: PersonaInput}[]}} onPersonasGenerated={handlePersonasGenerated} onError={setError} />;
+        return <PersonaCreationScreen 
+                 session={currentSession as {topic: string, title: string, personas: {userInput: PersonaInput}[]}} 
+                 onPersonasGenerated={handlePersonasGenerated} 
+                 onPersonaUpdate={handlePersonaUpdate}
+                 onError={setError} />;
       case Screen.PersonaGallery:
         return <PersonaGalleryScreen personas={currentSession.personas as Persona[]} onDebateStart={handleDebateStart} />;
       case Screen.Debate:
-        return <DebateScreen session={currentSession as {topic: string, personas: Persona[]}} onDebateComplete={handleDebateComplete} onError={setError} />;
+        return <DebateScreen session={currentSession as {topic: string, title: string, personas: Persona[]}} onDebateComplete={handleDebateComplete} onError={setError} />;
       case Screen.History:
         return <HistoryScreen />;
       default:
         return <div>Unknown Screen</div>;
     }
   };
+
+  if (!isKeyValid) {
+    return <ApiKeyInstructionsScreen />;
+  }
 
   return (
     <div className="min-h-screen w-full transition-colors duration-300">
@@ -121,7 +147,7 @@ const App: React.FC = () => {
         </nav>
       </header>
       <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-        {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-red-500 text-white py-2 px-4 rounded-md shadow-lg animate-fade-in">{error}</div>}
+        {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-red-500 text-white py-2 px-4 rounded-md shadow-lg animate-fade-in" onClick={() => setError(null)}>{error}</div>}
         {renderScreen()}
       </main>
     </div>

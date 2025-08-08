@@ -1,4 +1,3 @@
-
 export interface PersonaInput {
   id: number;
   name: string;
@@ -42,6 +41,7 @@ export interface DebateSession {
   id: string;
   createdAt: string;
   topic: string;
+  title: string;
   personas: Persona[];
   chatLog: ChatMessage[];
   conclusion: Conclusion | null;

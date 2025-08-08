@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { getAllSessions, deleteSession } from '../../services/dbService';
 import type { DebateSession } from '../../types';
@@ -10,15 +9,20 @@ declare var html2canvas: any;
 const HistoryDetailView: React.FC<{ session: DebateSession, onBack: () => void, onDownload: (id: string) => void }> = ({ session, onBack, onDownload }) => {
     return (
         <div className="bg-light-secondary dark:bg-dark-secondary p-8 rounded-2xl shadow-lg">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-start mb-6">
                 <button onClick={onBack} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">&larr; Back</button>
-                <div className="text-right">
-                    <h2 className="text-xl font-bold">{session.topic}</h2>
+                <div className="text-right flex-grow ml-4">
+                    <h2 className="text-2xl font-bold">{session.title}</h2>
                     <p className="text-sm text-gray-500">{new Date(session.createdAt).toLocaleString()}</p>
                 </div>
             </div>
             
             <div id={`pdf-content-${session.id}`} className="bg-light-primary dark:bg-dark-primary p-6 rounded-xl">
+                 <div className='mb-6'>
+                    <h3 className="text-lg font-bold text-light-text/90 dark:text-dark-text/90">Full Topic</h3>
+                    <p className="mt-1 text-light-text/70 dark:text-dark-text/70">{session.topic}</p>
+                 </div>
+
                  <h3 className="text-xl font-bold mb-4 border-b border-gray-300 dark:border-gray-600 pb-2">Personas</h3>
                  <div className="space-y-6 mb-6">
                      {session.personas.map(p => (
@@ -133,6 +137,12 @@ const HistoryScreen: React.FC = () => {
   };
 
   const handleDownloadPdf = async (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) {
+        console.error("Could not find session to download.");
+        return;
+    }
+
     const { jsPDF } = jspdf;
     const content = document.getElementById(`pdf-content-${sessionId}`);
     if(content){
@@ -150,12 +160,12 @@ const HistoryScreen: React.FC = () => {
         const pdfHeight = imgHeight * ratio;
 
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`convolution-session-${sessionId}.pdf`);
+        pdf.save(`convolution-session-${session.title.replace(/\s/g, '_')}.pdf`);
     }
   };
   
   const filteredSessions = sessions
-    .filter(s => s.topic.toLowerCase().includes(filter.toLowerCase()))
+    .filter(s => s.title.toLowerCase().includes(filter.toLowerCase()) || s.topic.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => {
         if (sortOrder === 'newest') {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -172,7 +182,7 @@ const HistoryScreen: React.FC = () => {
       <div className="bg-light-secondary dark:bg-dark-secondary p-8 rounded-2xl shadow-lg">
         <h2 className="text-3xl font-bold mb-6 text-center">Session History</h2>
         <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <input type="text" placeholder="Filter by topic..." value={filter} onChange={e => setFilter(e.target.value)} className="w-full bg-light-primary dark:bg-dark-primary border border-gray-300 dark:border-gray-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-light-accent"/>
+            <input type="text" placeholder="Filter by title..." value={filter} onChange={e => setFilter(e.target.value)} className="w-full bg-light-primary dark:bg-dark-primary border border-gray-300 dark:border-gray-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-light-accent"/>
             <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} className="bg-light-primary dark:bg-dark-primary border border-gray-300 dark:border-gray-600 rounded-lg py-2 px-3 focus:outline-none focus:ring-light-accent">
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -184,7 +194,7 @@ const HistoryScreen: React.FC = () => {
                 {filteredSessions.length > 0 ? filteredSessions.map(session => (
                     <div key={session.id} className="bg-light-primary dark:bg-dark-primary p-4 rounded-lg flex items-center justify-between hover:shadow-md transition-shadow">
                         <div onClick={() => setSelectedSession(session)} className="cursor-pointer flex-grow pr-4">
-                            <h3 className="font-bold">{session.topic}</h3>
+                            <h3 className="font-bold">{session.title}</h3>
                             <p className="text-sm text-gray-500">{new Date(session.createdAt).toLocaleString()}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">

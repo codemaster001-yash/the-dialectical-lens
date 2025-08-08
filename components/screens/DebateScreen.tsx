@@ -8,6 +8,7 @@ import useSpeech from '../../hooks/useSpeech';
 interface DebateScreenProps {
   session: {
     topic: string;
+    title: string;
     personas: Persona[];
   };
   onDebateComplete: (session: DebateSession) => void;
@@ -76,79 +77,41 @@ const DebateScreen: React.FC<DebateScreenProps> = ({ session, onDebateComplete, 
   const [conclusion, setConclusion] = useState<Conclusion | null>(null);
   const [isCountdown, setIsCountdown] = useState(true);
   const [isDebating, setIsDebating] = useState(false);
+  const [isConcluding, setIsConcluding] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState<string>('');
   const [finalSession, setFinalSession] = useState<DebateSession | null>(null);
   const [isAudioOn, setIsAudioOn] = useState(false);
   const { speak, cancel, isSpeaking } = useSpeech();
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
   const debateTurnTimeoutRef = useRef<number | null>(null);
-  
   const personaIndices = new Map(session.personas.map((p, i) => [p.name, i]));
   
-  // Refs to hold the latest state for callbacks, preventing stale closures.
-  const chatLogRef = useRef(chatLog);
-  useEffect(() => { chatLogRef.current = chatLog; }, [chatLog]);
-
-  const isSynthesizingRef = useRef(isSynthesizing);
-  useEffect(() => { isSynthesizingRef.current = isSynthesizing }, [isSynthesizing]);
-
-  const isCompleteRef = useRef(isComplete);
-  useEffect(() => { isCompleteRef.current = isComplete }, [isComplete]);
-  
-  const isDebatingRef = useRef(isDebating);
-  useEffect(() => { isDebatingRef.current = isDebating; }, [isDebating]);
-
-
-  const triggerConclusion = useCallback(async () => {
-    if(isSynthesizingRef.current || isCompleteRef.current) return;
-
+  const handleConcludeClick = useCallback(() => {
+    if (isSynthesizing || isComplete || isConcluding) return;
     setIsDebating(false);
-    setIsSynthesizing(true);
-    setCurrentSpeaker('');
-
     if (debateTurnTimeoutRef.current) clearTimeout(debateTurnTimeoutRef.current);
-    
-    try {
-        const currentChatLog = chatLogRef.current;
-        const conclusionResult = await synthesizeConclusion(session.topic, currentChatLog);
-        setConclusion(conclusionResult);
-
-        const sessionToSave: DebateSession = {
-            ...session,
-            id: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            chatLog: currentChatLog,
-            conclusion: conclusionResult,
-        };
-        await addSession(sessionToSave);
-        setFinalSession(sessionToSave);
-        setIsComplete(true);
-    } catch(e) {
-        console.error(e);
-        onError("Failed to synthesize conclusion. Please try again.");
-    } finally {
-        setIsSynthesizing(false);
-    }
-  }, [session, onError]);
+    setIsConcluding(true);
+  }, [isSynthesizing, isComplete, isConcluding]);
 
   const runTurn = useCallback(async () => {
-    const currentChatLog = chatLogRef.current;
-    if (currentChatLog.length >= MAX_TURNS) {
-        triggerConclusion();
+    if (chatLog.length >= MAX_TURNS) {
+        handleConcludeClick();
         return;
     }
 
     try {
-        const turnGenerator = runDebateTurnStream(session.topic, session.personas, currentChatLog);
+        const turnGenerator = runDebateTurnStream(session.topic, session.personas, chatLog);
         
         let lastChunk: ChatMessage | null = null;
         for await (const chunk of turnGenerator) {
+             if (!isDebating) break; // Stop if debate was ended mid-stream
             setCurrentSpeaker(chunk.personaName);
-            // Functional update to avoid race conditions.
             setChatLog(prev => {
-                if(prev.length > 0 && prev[prev.length - 1].personaName === chunk.personaName) {
+                const last = prev[prev.length - 1];
+                if(last && last.personaName === chunk.personaName) {
                     return [...prev.slice(0, -1), chunk];
                 } else {
                     return [...prev, chunk];
@@ -157,7 +120,7 @@ const DebateScreen: React.FC<DebateScreenProps> = ({ session, onDebateComplete, 
             lastChunk = chunk;
         }
 
-        if (isDebatingRef.current) {
+        if (isDebating) {
             debateTurnTimeoutRef.current = window.setTimeout(runTurn, 2000); // Recursive call
         }
 
@@ -166,8 +129,9 @@ const DebateScreen: React.FC<DebateScreenProps> = ({ session, onDebateComplete, 
         onError("An error occurred during the debate.");
         setIsDebating(false);
     }
-  }, [session, triggerConclusion, onError]);
+  }, [session, chatLog, isDebating, handleConcludeClick, onError]);
   
+  // Effect to start the debate after countdown
   useEffect(() => {
       if (isDebating) {
           runTurn();
@@ -176,6 +140,38 @@ const DebateScreen: React.FC<DebateScreenProps> = ({ session, onDebateComplete, 
           if(debateTurnTimeoutRef.current) clearTimeout(debateTurnTimeoutRef.current);
       }
   }, [isDebating, runTurn]);
+
+  // Effect to handle the conclusion process
+  useEffect(() => {
+    if (!isConcluding) return;
+
+    const conclude = async () => {
+        setIsSynthesizing(true);
+        setCurrentSpeaker('');
+        try {
+            const conclusionResult = await synthesizeConclusion(session.topic, chatLog);
+            setConclusion(conclusionResult);
+            const sessionToSave: DebateSession = {
+                ...session,
+                id: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                chatLog: chatLog,
+                conclusion: conclusionResult,
+            };
+            await addSession(sessionToSave);
+            setFinalSession(sessionToSave);
+            setIsComplete(true);
+        } catch(e) {
+            console.error(e);
+            onError("Failed to synthesize conclusion. Please try again.");
+        } finally {
+            setIsSynthesizing(false);
+        }
+    };
+
+    conclude();
+  }, [isConcluding, chatLog, session, onError]);
+
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -209,17 +205,22 @@ const DebateScreen: React.FC<DebateScreenProps> = ({ session, onDebateComplete, 
       )}
       
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-wrap gap-y-2">
-        <h2 className="text-lg font-bold truncate pr-4" title={session.topic}>Debate: {session.topic}</h2>
-        <div className="flex items-center gap-4">
-            {isDebating && currentSpeaker && <div className="flex items-center gap-2"><Spinner className="text-light-accent dark:text-dark-accent" /> <span className="text-sm font-medium">{currentSpeaker} is speaking...</span></div>}
-            {isSynthesizing && <div className="flex items-center gap-2"><Spinner className="text-light-accent dark:text-dark-accent" /> <span className="text-sm font-medium">Synthesizing...</span></div>}
-            {isComplete && <div className="text-sm font-bold text-success">Conversation Complete!</div>}
-            {isDebating && !isSynthesizing && (
-                <button onClick={triggerConclusion} className="px-4 py-2 text-sm bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-300">
+        <h2 className="text-lg font-bold truncate pr-4" title={session.topic}>Debate: {session.title}</h2>
+        <div className="flex items-center justify-end gap-4 flex-1">
+             {isDebating && !isSynthesizing && (
+                <button onClick={handleConcludeClick} className="px-4 py-2 text-sm bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-300">
                     Conclude Debate
                 </button>
             )}
-            <button onClick={toggleAudio} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10" disabled={isSynthesizing || isComplete}><AudioOnIcon /></button>
+            <div className="flex-grow" />
+            <div className="flex items-center gap-2">
+                {isDebating && currentSpeaker && <div className="flex items-center gap-2"><Spinner className="text-light-accent dark:text-dark-accent" /> <span className="text-sm font-medium">{currentSpeaker} is speaking...</span></div>}
+                {isSynthesizing && <div className="flex items-center gap-2"><Spinner className="text-light-accent dark:text-dark-accent" /> <span className="text-sm font-medium">Synthesizing...</span></div>}
+                {isComplete && <div className="text-sm font-bold text-success">Conversation Complete!</div>}
+                <button onClick={toggleAudio} className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10" disabled={isSynthesizing || isComplete}>
+                    {isAudioOn ? <AudioOnIcon /> : <AudioOffIcon />}
+                </button>
+            </div>
         </div>
       </div>
       

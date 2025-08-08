@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import type { PersonaInput } from '../../types';
+import type { PersonaInput, DebateSession } from '../../types';
+import { LoadIcon, Spinner } from '../icons/Icons';
+import LoadFromHistoryModal from '../modals/LoadFromHistoryModal';
 
 interface SetupScreenProps {
   onSetupComplete: (topic: string, participants: PersonaInput[]) => void;
+  isProcessing: boolean;
 }
 
-const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
+const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete, isProcessing }) => {
   const [topic, setTopic] = useState('');
   const [participantCount, setParticipantCount] = useState(2);
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const participantOptions = [2, 3, 4];
 
   const canProceed = topic.trim().length > 10 && participantCount > 0;
@@ -22,13 +26,30 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
     onSetupComplete(topic, participants);
   };
 
+  const handleLoadSession = (session: DebateSession) => {
+      if (topic.trim() !== '' && !window.confirm('This will overwrite the current topic and participant count. Are you sure?')) {
+          return;
+      }
+      setTopic(session.topic);
+      setParticipantCount(session.personas.length);
+      setIsLoadModalOpen(false);
+  };
+
   return (
     <div className="max-w-3xl mx-auto animate-slide-in">
+      {isLoadModalOpen && <LoadFromHistoryModal onLoad={handleLoadSession} onClose={() => setIsLoadModalOpen(false)} />}
       <div className="bg-light-secondary dark:bg-dark-secondary p-8 rounded-2xl shadow-lg">
-        <h2 className="text-3xl font-bold mb-2 text-center">Start a New Convolution</h2>
-        <p className="text-center text-light-text/70 dark:text-dark-text/70 mb-8">
-          Define the central conflict or question you want the AI personas to explore.
-        </p>
+        <div className="flex justify-between items-start mb-8">
+            <div className='flex-grow'>
+                <h2 className="text-3xl font-bold mb-2 text-center md:text-left">Start a New Convolution</h2>
+                <p className="text-center md:text-left text-light-text/70 dark:text-dark-text/70">
+                Define the central conflict or question you want the AI personas to explore.
+                </p>
+            </div>
+            <button onClick={() => setIsLoadModalOpen(true)} className="p-2 ml-4 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors flex-shrink-0" aria-label="Load from history">
+                <LoadIcon />
+            </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           <div>
@@ -69,10 +90,10 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => {
           <div className="text-center pt-4">
             <button
               type="submit"
-              disabled={!canProceed}
-              className="px-8 py-3 bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+              disabled={!canProceed || isProcessing}
+              className="px-8 py-3 bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center min-w-[200px]"
             >
-              Create Personas
+              {isProcessing ? <Spinner className="text-white"/> : 'Create Personas'}
             </button>
           </div>
         </form>
