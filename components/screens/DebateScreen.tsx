@@ -23,7 +23,7 @@ interface DebateScreenProps {
   onError: (message: string) => void;
 }
 
-const MAX_TURNS = 12; // Default max turns before auto-concluding
+const MAX_TURNS = 12;
 
 const Countdown: React.FC<{ onEnd: () => void }> = ({ onEnd }) => {
   const [count, setCount] = useState(3);
@@ -111,139 +111,123 @@ const DebateScreen: React.FC<DebateScreenProps> = ({
   const [isDebating, setIsDebating] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [hasConcluded, setHasConcluded] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState<string>("");
   const [finalSession, setFinalSession] = useState<DebateSession | null>(null);
   const [isAudioOn, setIsAudioOn] = useState(false);
   const { speak, cancel, isSpeaking } = useSpeech();
 
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatLogRef = useRef<ChatMessage[]>(chatLog);
-  const prevIsDebatingRef = useRef<boolean>(isDebating);
-  const debateTurnTimeoutRef = useRef<number | null>(null);
-
-  const personaIndices = new Map(session.personas.map((p, i) => [p.name, i]));
-
-  // Keep refs in sync with state to prevent stale closures
+  const hasConcludedRef = useRef(false);
+  const chatLogRef = useRef(chatLog);
   useEffect(() => {
     chatLogRef.current = chatLog;
   }, [chatLog]);
 
-  useEffect(() => {
-    prevIsDebatingRef.current = isDebating;
-  }, [isDebating]);
+  const personaIndices = new Map(session.personas.map((p, i) => [p.name, i]));
 
-  const handleConcludeClick = useCallback(() => {
-    if (!isDebating) return;
-    // This is the only user action needed to stop the debate.
-    // The useEffect watching isDebating will handle the conclusion.
+  const concludeDebate = useCallback(async () => {
+    if (hasConcludedRef.current) return;
+    hasConcludedRef.current = true;
+
     setIsDebating(false);
-  }, [isDebating]);
-
-  const runTurn = useCallback(async () => {
-    // Check ref for debate status to ensure immediate stop
-    if (!isDebating) {
-      if (debateTurnTimeoutRef.current)
-        clearTimeout(debateTurnTimeoutRef.current);
-      return;
-    }
-
-    // Check for max turns
-    if (chatLogRef.current.length >= MAX_TURNS) {
-      setIsDebating(false); // Stop the debate, conclusion effect will fire
-      return;
-    }
+    setIsSynthesizing(true);
+    setCurrentSpeaker("");
 
     try {
-      const turnGenerator = runDebateTurnStream(
-        session.topic,
-        session.personas,
-        chatLogRef.current
-      );
-
-      for await (const chunk of turnGenerator) {
-        // Re-check in case user concluded mid-stream
-        if (!isDebating) break;
-        setCurrentSpeaker(chunk.personaName);
-        setChatLog((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.personaName === chunk.personaName) {
-            return [...prev.slice(0, -1), chunk];
-          } else {
-            return [...prev, chunk];
-          }
+      const finalChatLog = chatLogRef.current;
+      if (finalChatLog.length === 0) {
+        onDebateComplete({
+          ...session,
+          id: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          chatLog: [],
+          conclusion: null,
         });
+        return;
       }
 
-      if (isDebating) {
-        // Check again after the loop
-        debateTurnTimeoutRef.current = window.setTimeout(runTurn, 2000);
-      }
+      const conclusionResult = await synthesizeConclusion(
+        session.topic,
+        finalChatLog
+      );
+      setConclusion(conclusionResult);
+
+      const sessionToSave: DebateSession = {
+        ...session,
+        id: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        chatLog: finalChatLog,
+        conclusion: conclusionResult,
+      };
+      await addSession(sessionToSave);
+      setFinalSession(sessionToSave);
+      setIsComplete(true);
     } catch (e) {
       console.error(e);
-      onError("An error occurred during the debate.");
-      setIsDebating(false);
+      onError("Failed to synthesize conclusion. Please try again.");
+    } finally {
+      setIsSynthesizing(false);
     }
-  }, [session, isDebating, onError]);
+  }, [session, onDebateComplete, onError]);
 
-  // Effect to start the debate after countdown
+  const handleConcludeClick = () => {
+    concludeDebate();
+  };
+
   useEffect(() => {
+    let timeoutId: number | null = null;
+    let isEffectActive = true;
+
+    const runTurn = async () => {
+      if (!isDebating || !isEffectActive) return;
+
+      if (chatLogRef.current.length >= MAX_TURNS) {
+        concludeDebate();
+        return;
+      }
+
+      try {
+        const turnGenerator = runDebateTurnStream(
+          session.topic,
+          session.personas,
+          chatLogRef.current
+        );
+
+        for await (const chunk of turnGenerator) {
+          if (!isDebating || !isEffectActive) break;
+
+          setCurrentSpeaker(chunk.personaName);
+          setChatLog((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.personaName === chunk.personaName) {
+              return [...prev.slice(0, -1), chunk];
+            } else {
+              return [...prev, chunk];
+            }
+          });
+        }
+
+        if (isDebating && isEffectActive) {
+          timeoutId = window.setTimeout(runTurn, 2000);
+        }
+      } catch (e) {
+        console.error(e);
+        if (isEffectActive) {
+          onError("An error occurred during the debate.");
+          setIsDebating(false);
+        }
+      }
+    };
+
     if (isDebating) {
       runTurn();
     }
+
     return () => {
-      if (debateTurnTimeoutRef.current)
-        clearTimeout(debateTurnTimeoutRef.current);
+      isEffectActive = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isDebating, runTurn]);
-
-  // Effect to handle the CONCLUSION process
-  useEffect(() => {
-    const wasDebating = prevIsDebatingRef.current;
-
-    // Trigger condition: debate was running, but has now stopped, and we haven't already run conclusion.
-    if (
-      wasDebating &&
-      !isDebating &&
-      !hasConcluded &&
-      chatLogRef.current.length > 0
-    ) {
-      // Guard to ensure this runs only once
-      setHasConcluded(true);
-
-      const conclude = async () => {
-        setIsSynthesizing(true);
-        setCurrentSpeaker("");
-        try {
-          // Use the ref to get the absolute final chat log
-          const finalChatLog = chatLogRef.current;
-          const conclusionResult = await synthesizeConclusion(
-            session.topic,
-            finalChatLog
-          );
-          setConclusion(conclusionResult);
-
-          const sessionToSave: DebateSession = {
-            ...session,
-            id: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            chatLog: finalChatLog,
-            conclusion: conclusionResult,
-          };
-          await addSession(sessionToSave);
-          setFinalSession(sessionToSave);
-          setIsComplete(true);
-        } catch (e) {
-          console.error(e);
-          onError("Failed to synthesize conclusion. Please try again.");
-        } finally {
-          setIsSynthesizing(false);
-        }
-      };
-
-      conclude();
-    }
-  }, [isDebating, hasConcluded, session, onError]);
+  }, [isDebating, session, concludeDebate, onError]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -287,7 +271,6 @@ const DebateScreen: React.FC<DebateScreenProps> = ({
           {isDebating && !isSynthesizing && (
             <button
               onClick={handleConcludeClick}
-              disabled={!isDebating || hasConcluded}
               className="px-4 py-2 text-sm bg-light-accent text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-all duration-300 disabled:opacity-50"
             >
               Conclude Debate
