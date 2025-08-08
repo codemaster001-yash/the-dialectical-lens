@@ -1,4 +1,3 @@
-
 export interface PersonaInput {
   id: number;
   name: string;
@@ -56,6 +55,7 @@ export enum Screen {
   Debate,
   History,
   Replay,
+  About,
 }
 
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';

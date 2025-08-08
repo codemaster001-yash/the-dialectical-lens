@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { DebateSession } from '../../types';
 import useSpeech from '../../hooks/useSpeech';

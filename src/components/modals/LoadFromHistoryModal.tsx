@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { getAllSessions } from '../../services/dbService';
 import type { DebateSession } from '../../types';
