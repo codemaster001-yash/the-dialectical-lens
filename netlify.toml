@@ -4,7 +4,7 @@
   # 'node scripts/replace-api-key.js' executes your script to securely inject the 
   # GEMINI_API_KEY from your Netlify environment variables into index.html.
   # This method is much safer and more reliable than 'sed'.
-  command = "node scripts/replace-api-key.js"
+  command = "node scripts/replace-api-key.cjs"
   
   # This tells Netlify where to find the site to deploy *after* the command runs.
   # Since your project is not a compiled app, the publish directory is the root itself ('.').
