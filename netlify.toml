@@ -1,0 +1,12 @@
+# This is the final, correct configuration for your Netlify deployment.
+[build]
+  # This command runs the robust Node.js script you have.
+  # 'node scripts/replace-api-key.js' executes your script to securely inject the 
+  # GEMINI_API_KEY from your Netlify environment variables into index.html.
+  # This method is much safer and more reliable than 'sed'.
+  command = "node scripts/replace-api-key.cjs"
+  
+  # This tells Netlify where to find the site to deploy *after* the command runs.
+  # Since your project is not a compiled app, the publish directory is the root itself ('.').
+  # This line specifically fixes the "Deploy directory 'dist' does not exist" error.
+  publish = "."
