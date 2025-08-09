@@ -1,12 +1,9 @@
-# This is the final, correct configuration for your Netlify deployment.
+# This is the standard configuration for deploying a Vite project on Netlify.
 [build]
-  # This command runs the robust Node.js script you have.
-  # 'node scripts/replace-api-key.js' executes your script to securely inject the 
-  # GEMINI_API_KEY from your Netlify environment variables into index.html.
-  # This method is much safer and more reliable than 'sed'.
-  command = "node scripts/replace-api-key.cjs"
+  # This command tells Netlify to run the "build" script from your package.json.
+  # It will compile your TypeScript and optimize the app for production.
+  command = "npm run build"
   
-  # This tells Netlify where to find the site to deploy *after* the command runs.
-  # Since your project is not a compiled app, the publish directory is the root itself ('.').
-  # This line specifically fixes the "Deploy directory 'dist' does not exist" error.
-  publish = "."
+  # This tells Netlify that the final, public website files will be in a folder named "dist".
+  # This is the default output directory for Vite.
+  publish = "dist"
